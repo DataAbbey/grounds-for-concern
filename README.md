@@ -1,83 +1,116 @@
 # Grounds for Concern
-### When more volume meant less profit: a size-tier pricing and assortment EDA
+### Regional Coffee Assortment & Pricing Impact Analysis
 
-> **Synthetic data.** Ridgeline Roasters is a fictional 6-store specialty coffee retailer. The dataset is generated in this repo, but it is modeled on a real pricing and assortment analysis I led in a regulated retail category, and it reproduces the same pattern.
+> **Synthetic data.** Ridgeline Roasters is a fictional 6-store specialty coffee retailer. The dataset is generated in this repo, but it is modeled on a real pricing and assortment analysis I led in a regulated retail category, and it reproduces the same pattern. A **unit** is one item sold: a 12 oz bag and a 5 lb bag each count as one unit.
 
-![Volume vs net sales vs gross profit](charts/01_volume_vs_profit.png)
+![Units, net sales and gross profit](charts/01_units_revenue_profit.png)
 
 ---
 
-## Executive summary
+## Executive Summary
 
-From July to December 2025, Ridgeline's whole-bean coffee category showed a puzzling pattern. Volume (ounces sold) climbed steadily, but revenue lagged far behind it and gross profit actually fell. Leadership needed to know whether this was a demand problem, a pricing problem, or something else.
+A regional specialty coffee retailer was experiencing a puzzling pattern: unit sales were climbing steadily while revenue remained flat and average transaction value declined sharply over the course of a year. Leadership needed to understand whether this was a demand problem, a pricing problem, or something else entirely.
 
-I ran an end-to-end pricing and assortment analysis across three bag sizes: **Small (12 oz)**, **Medium (2 lb)** and **Bulk (5 lb)**. I looked at net sales, gross margin, discount rate, net sales per ounce and in-stock SKU depth for each size.
+I conducted an end-to-end pricing and assortment analysis examining net sales, gross margin, discount rates, net sales per unit and net sales per ounce across three product size tiers: **Small (12 oz)**, **Medium (2 lb)** and **Bulk (5 lb)**. The analysis revealed that a shift in inventory toward larger-format products had constrained customer choice and inadvertently trained customers to purchase the lowest cost-per-ounce option, cannibalizing higher-margin smaller sizes. Gross margin on the largest format had fallen from **58% to as low as 23%** over the review period, driven by a combination of aggressive discounting and underpriced inventory. Meanwhile, SKU availability across all sizes had declined by **55%**, limiting the customer's ability to trade up or diversify their basket.
 
-The analysis found that inventory buys had tilted toward Bulk bags. Small and Medium SKUs went out of stock while Bulk stayed fully stocked and was discounted harder each month. Customers were effectively trained to buy the cheapest cost-per-ounce option, which cannibalized the higher-margin smaller sizes.
+My recommendations focused on three areas: resetting pricing strategy using net sales per unit as the primary profitability metric rather than units sold, capping discounts on large-format products to prevent margin erosion, and rebalancing inventory allocation to protect high-margin demand regardless of size. This analysis directly informed the pricing and planning team's strategy for the following quarter.
 
-| Metric (Jun → Dec 2025) | Change |
+| Metric (Jan to Dec 2025) | Change |
 |---|---|
-| Ounces sold | **+144%** |
-| Net sales | +38% |
-| Gross profit | **−18%** |
-| Net sales per oz (category) | $1.19 → $0.67 (**−44%**) |
-| Bulk gross margin | **57% → 21%** |
-| Bulk discount rate | 5% → 38% |
-| Small + Medium SKUs in stock per store | 23.4 → 9.6 (**−59%**) |
-| Bulk share of ounces sold | 41% → 79% |
+| Units sold | **+13%** |
+| Net sales | **flat (0%)** |
+| Average transaction value | $59.76 → $37.93 (**−37%**) |
+| Gross profit | **−46%** |
+| Bulk gross margin | **58% → 23%** |
+| Net sales per Bulk unit | $79.57 → $42.85 (**−46%**) |
+| In-stock SKUs per store, all sizes | 35.4 → 16.1 (**−55%**) |
 
 ---
 
-## The business problem
+## The Business Problem
 
-On the surface the category looked healthy, because units were moving. Underneath, every additional ounce was earning less, and the largest volume driver was quietly losing most of its margin. Leadership had no view into *why*. They needed a way to diagnose the root cause and correct course before the next planning cycle.
+On the surface, the business looked healthy: units were moving. But revenue told a different story. Average transaction value was declining month over month, and gross margin on the category's largest format had quietly eroded to levels that threatened the business's profitability. Leadership lacked visibility into *why*, and needed a framework to diagnose the root cause and course correct before the next planning cycle.
 
-## Approach
+![Average transaction value](charts/02_avg_transaction_value.png)
 
-1. **Frame the metric.** I replaced "units sold" with **net sales per ounce** and **gross margin by size tier** as the measures of business health.
-2. **Decompose by size tier.** I split every monthly metric by Small, Medium and Bulk to see where margin was leaking.
-3. **Check the shelf.** I joined weekly inventory snapshots to measure how many SKUs per size were actually available to buy.
-4. **Test for cannibalization.** I compared each size's share of ounces sold across three windows: before the drift, during it, and after the reset.
+---
 
-## What the data revealed
+## My Approach
 
-**1. The per-oz price ladder stretched.** Small and Medium held their per-oz price. Bulk was list-cut and stacked with promos until it sold for about a third of Small's per-oz price.
+I conducted an end-to-end pricing and assortment analysis across three product size tiers, examining:
 
-![Net sales per oz by size](charts/02_net_sales_per_oz_by_size.png)
+- **Net sales**: to understand revenue trends beyond unit volume
+- **Gross margin by size tier**: to identify where profitability was eroding
+- **Discount rates**: to measure the impact of promotional activity on margin
+- **Net sales per unit**: as the primary profitability lens, replacing units sold as the north star metric
+- **SKU availability**: to assess whether assortment constraints were shaping customer behavior
 
-**2. Bulk margin collapsed.** Bulk went from a 57% margin, in line with the rest of the category, to 21% by December. Small held at 64% throughout.
+The goal was to move from "units are up, revenue is flat" to a clear, data-backed explanation of the underlying dynamic, and a set of actionable recommendations for the pricing and planning team.
 
-![Gross margin by size](charts/03_gross_margin_by_size.png)
+---
 
-**3. The shelf pushed customers into Bulk.** By December, stores averaged about 5 of 12 Small and Medium SKUs in stock, while all 12 Bulk SKUs stayed full. Customers who wanted a smaller bag either found it gone or found Bulk cheaper per ounce.
+## What the Data Revealed
 
-![In-stock SKUs by size](charts/04_instock_skus_by_size.png)
+The analysis uncovered a compounding problem driven by three interconnected factors.
 
-**4. Volume migrated, not grew.** Bulk's share of ounces nearly doubled. The extra volume largely came from customers trading *into* the lowest-margin format, which is cannibalization rather than new demand.
+**1. Inventory shift toward larger formats constrained customer choice**
 
-![Size mix share](charts/05_size_mix_share.png)
+A shift in inventory toward larger-format products had reduced the availability of smaller, higher-margin sizes. SKU availability across all sizes declined by 55% over the review period, from about 35 to 16 in-stock SKUs per store, limiting the customer's ability to trade up or diversify their basket. Small was hit hardest, falling to about 4 of 12 SKUs in stock.
+
+![SKU availability](charts/03_sku_availability.png)
+
+**2. Customers were trained to optimize for cost-per-ounce**
+
+With smaller sizes less available and larger formats heavily discounted, customers naturally gravitated toward the lowest cost-per-ounce option. By December, Bulk sold for $0.54 per ounce against $1.64 for Small, and Bulk's share of units sold went from 15% to 40%. This behavior shift was not a demand problem. It was a pricing and assortment problem that the business had inadvertently created.
+
+![Unit mix by size](charts/04_unit_mix_by_size.png)
+
+**3. Aggressive discounting on large formats destroyed margin**
+
+Gross margin on the largest format fell from **58% to as low as 23%** over the review period, driven by a combination of aggressive discounting (Bulk discount rate went from 1% to 29%) and underpriced inventory. Net sales per Bulk unit fell 46% and per Medium unit 37%. Meanwhile, the cannibalization of higher-margin smaller sizes meant the business was selling more units at lower profitability across the board.
+
+![Gross margin by size](charts/05_gross_margin_by_size.png)
+
+![Net sales per unit by size](charts/06_net_sales_per_unit_by_size.png)
+
+The result: rising unit sales masking significant margin erosion, a pattern that would have continued to compound without intervention.
+
+---
 
 ## Recommendations
 
-1. **Make net sales per ounce the north-star metric.** Volume is a vanity metric when margin is eroding. Evaluate pricing decisions on per-oz revenue and margin by size tier.
-2. **Cap discounts on large formats.** Stacked Bulk promos were the single biggest driver of margin loss. Setting a discount cap per size tier protects margin while keeping Bulk competitive.
-3. **Rebalance inventory to protect high-margin demand.** Restore Small and Medium availability so customers can choose, and trade up, instead of defaulting to Bulk.
+My recommendations focused on three areas:
 
-## Impact (simulated reset, Jan–Mar 2026)
+**1. Reset the pricing strategy using net sales per unit as the primary profitability metric**
+Units sold is a vanity metric when margin is eroding. Net sales per unit, not volume, should be the north star for evaluating pricing decisions across size tiers.
 
-The dataset models those recommendations taking effect in January 2026:
+**2. Cap discounts on large-format products**
+Discounting on the largest format was the single biggest driver of margin erosion. Implementing discount caps by size tier would protect margin without sacrificing competitive positioning.
 
-- Category net sales per oz recovered to **$1.15** by March, close to the pre-drift $1.19.
-- Bulk margin recovered to **56%**, and blended category margin returned to **58%** (from 35% in December).
-- Bulk's share of ounces fell back to **46%**, with no more cross-size cannibalization.
+**3. Rebalance inventory allocation to protect high-margin demand**
+Restoring SKU availability across smaller sizes would give customers the choice to trade up, recovering margin from customers who would purchase higher-margin products if they were available.
 
 ---
 
-## Repo layout
+## Impact
+
+This analysis directly informed the pricing and planning team's strategy for the following quarter. The findings reframed how leadership assessed business health, shifting the conversation from unit volume to profitability per unit, and provided a clear, data-backed roadmap for recovering margin without sacrificing customer demand.
+
+The dataset models the reset taking effect in Q1 2026. By March, average transaction value was back to $59.81, Bulk margin recovered to 57%, blended margin returned to 59% (from 32% in December), and in-stock SKUs were back to about 35 per store.
+
+---
+
+## Tools & Methods
+
+- **SQL**: data extraction and transformation across inventory, transaction and discount data (SQLite here; the views port directly to Snowflake or Postgres)
+- **Python**: data generation, statistical analysis and trend modeling across size tiers (pandas, NumPy, matplotlib)
+- **Key metrics:** net sales per unit, gross margin by tier, discount rate, SKU availability, unit volume, average transaction value
+
+### Repo layout
 
 ```
 grounds-for-concern/
-├── data/                  # generated CSVs + ridgeline.db (SQLite)
+├── data/                  # generated CSVs + ridgeline.db (SQLite), not committed
 ├── sql/eda_queries.sql    # monthly, by-tier, in-stock and mix-shift queries
 ├── src/
 │   ├── generate_data.py   # builds the synthetic dataset (seeded, reproducible)
@@ -86,25 +119,19 @@ grounds-for-concern/
 └── charts/                # PNG outputs used in this README
 ```
 
-## Data model
+### Data model
 
 | Table | Grain | Key columns |
 |---|---|---|
 | `stores` | store | store_id, region, traffic_index |
 | `products` | SKU (12 origins × 3 sizes) | sku_id, size_oz, size_tier, base_list_price, unit_cost |
-| `transactions` | order line (~115k rows) | order_date, store_id, sku_id, qty, gross_sales, discount_amt, net_sales, cogs |
+| `transactions` | order line (~165k rows) | order_id, order_date, store_id, sku_id, qty, gross_sales, discount_amt, net_sales, cogs |
 | `inventory_snapshots` | store × SKU × week | week_start, on_hand_units |
 
-## Run it
+### Run it
 
 ```bash
 pip install -r requirements.txt
-python src/generate_data.py   # ~1 min, seeded so results are reproducible
+python src/generate_data.py   # ~2 min, seeded so results are reproducible
 python src/eda.py             # builds the DB, renders charts, prints the numbers above
 ```
-
-## Tools & methods
-
-- **SQL** (SQLite; the views port directly to Snowflake or Postgres) for extraction and metric logic
-- **Python** (pandas, NumPy, matplotlib) for data generation, analysis and charts
-- **Key metrics:** net sales per oz, gross margin by tier, discount rate, in-stock SKU depth, size-mix share

@@ -6,10 +6,10 @@ Category under review: whole-bean coffee, sold in three bag sizes:
     12 oz  (Small)   |   2 lb / 32 oz  (Medium)   |   5 lb / 80 oz  (Bulk)
 
 The data is fake but built to reproduce a real-world pattern:
-  * Jan-Jun 2025: healthy price ladder, broad assortment.
-  * Jul-Dec 2025: inventory buys tilt toward Bulk bags, Small/Medium SKUs go
-    out of stock, Bulk gets list-price cuts plus stacked promos. Volume climbs,
-    revenue stalls, per-oz revenue and Bulk margin collapse.
+  * Jan-Dec 2025: assortment thins (SKU availability falls across all sizes,
+    smallest hardest), larger bags get list-price cuts plus stacked promos.
+    Unit sales (bags) climb, revenue stays flat, average transaction value and
+    per-unit revenue fall, and Bulk margin collapses.
   * Jan-Mar 2026: pricing reset (per-oz ladder restored, Bulk promos capped,
     assortment rebalanced). Per-oz revenue recovers.
 
@@ -64,34 +64,33 @@ products = pd.DataFrame(rows)
 
 # ------------------------------------------------- monthly business levers
 months = pd.period_range(START, END, freq="M")
-# 0 = healthy, 1 = full drift (Dec 2025), then reset in 2026
+# 0 = healthy (Jan 2025), 1 = full drift (Dec 2025), then a reset in 2026
 drift = {}
 for m in months:
-    if m < pd.Period("2025-07"):
-        drift[m] = 0.0
-    elif m <= pd.Period("2025-12"):
-        drift[m] = (m.month - 6) / 6           # Jul .17 ... Dec 1.0
+    if m.year == 2025:
+        drift[m] = (m.month - 1) / 11
     else:
-        drift[m] = {1: 0.55, 2: 0.25, 3: 0.10}[m.month]  # recovery glide
+        drift[m] = {1: 0.45, 2: 0.20, 3: 0.08}[m.month]  # recovery glide
 
 
 def levers(m):
     d = drift[m]
     fixed = m >= pd.Period("2026-01")
     return {
-        # Bulk list price multiplier (1.0 -> 0.84 at full drift)
-        "bulk_list_mult": 1 - 0.16 * d,
-        # average promo depth by tier
-        "promo": {"Small": 0.04, "Medium": 0.06 + 0.06 * d,
-                  "Bulk": 0.05 + (0.08 if fixed else 0.33) * d},
-        # share of Small/Medium SKUs in stock (1.0 -> ~0.40)
-        "sm_instock": 1 - 0.60 * d,
-        "bulk_instock": 1.0,
-        # customer tier preference shifts toward Bulk as ladder & stock tilt
-        "tier_weights": {"Small": 0.52 - 0.30 * d,
-                         "Medium": 0.33 - 0.08 * d,
-                         "Bulk": 0.15 + 0.38 * d},
-        "traffic_mult": 1 + 0.10 * d,   # deals pull a bit more traffic
+        # list-price multipliers by tier (larger bags get cut)
+        "list_mult": {"Small": 1.0, "Medium": 1 - 0.15 * d, "Bulk": 1 - 0.25 * d},
+        # average promo depth by tier (stacked promos on larger bags)
+        "promo": {"Small": 0.03,
+                  "Medium": 0.03 + (0.06 if fixed else 0.25) * d,
+                  "Bulk": 0.002 + (0.08 if fixed else 0.29) * d},
+        # share of each tier's SKUs in stock
+        "instock": {"Small": 1 - 0.70 * d, "Medium": 1 - 0.55 * d, "Bulk": 1 - 0.40 * d},
+        # what customers reach for first
+        "tier_weights": {"Small": 0.55 - 0.30 * d, "Medium": 0.30 + 0.05 * d,
+                         "Bulk": 0.15 + 0.25 * d},
+        # items per order: diverse baskets shrink as the shelf thins
+        "basket": [0.45 + 0.35 * d, 0.35 - 0.20 * d, 0.20 - 0.15 * d],  # P(1,2,3 items)
+        "traffic_mult": 1 + 0.55 * d,   # deals pull more, smaller orders
     }
 
 
@@ -104,12 +103,9 @@ for s in stores.store_id:
         lv = levers(w.to_period("M"))
         live = set()
         for _, p in products.iterrows():
-            p_in = lv["bulk_instock"] if p.size_tier == "Bulk" else lv["sm_instock"]
+            p_in = lv["instock"][p.size_tier]
             in_stock = rng.random() < max(0.05, min(1.0, p_in + rng.normal(0, 0.05)))
-            if p.size_tier == "Bulk":
-                on_hand = int(rng.integers(8, 20) * (1 + drift[w.to_period('M')]))
-            else:
-                on_hand = int(rng.integers(6, 30)) if in_stock else 0
+            on_hand = int(rng.integers(6, 30)) if in_stock else 0
             if on_hand > 0:
                 live.add(p.sku_id)
             inv_rows.append({"week_start": w.date(), "store_id": s,
@@ -129,28 +125,31 @@ for day in days:
     weekend = 1.25 if day.weekday() >= 5 else 1.0
     season = 1 + 0.12 * np.cos((day.dayofyear - 340) / 365 * 2 * np.pi)  # holiday bump
     for _, st in stores.iterrows():
-        n_orders = rng.poisson(38 * st.traffic_index * weekend * season * lv["traffic_mult"])
+        n_orders = rng.poisson(30 * st.traffic_index * weekend * season * lv["traffic_mult"])
         live = instock_lookup.get((st.store_id, wk), set(products.sku_id))
         tw = lv["tier_weights"]
         tiers = list(tw)
         probs = np.array([tw[t] for t in tiers]); probs /= probs.sum()
         for _ in range(n_orders):
             order_seq += 1
-            tier = rng.choice(tiers, p=probs)
-            cand = prod_by_tier[tier]
-            cand = cand[cand.sku_id.isin(live)]
-            if cand.empty:  # wanted size is out -> trade to Bulk (cannibalization)
-                tier = "Bulk"
-                cand = prod_by_tier["Bulk"]
-            p = cand.iloc[rng.integers(len(cand))]
-            qty = 1 if tier != "Small" else int(rng.choice([1, 1, 1, 2]))
-            list_price = p.base_list_price * (lv["bulk_list_mult"] if tier == "Bulk" else 1.0)
-            promo = max(0.0, rng.normal(lv["promo"][tier], 0.04))
-            gross = round(list_price * qty, 2)
-            disc = round(gross * promo, 2)
-            tx.append((f"O{order_seq:07d}", day.date(), st.store_id, p.sku_id, qty,
-                       round(list_price, 2), gross, disc, round(gross - disc, 2),
-                       round(p.unit_cost * qty, 2)))
+            n_items = int(rng.choice([1, 2, 3], p=lv["basket"]))
+            for _ in range(n_items):
+                tier = rng.choice(tiers, p=probs)
+                cand = prod_by_tier[tier]
+                cand = cand[cand.sku_id.isin(live)]
+                if cand.empty:  # wanted size is out -> take any size on the shelf
+                    cand = products[products.sku_id.isin(live)]
+                    if cand.empty:
+                        continue
+                p = cand.iloc[rng.integers(len(cand))]
+                t = p.size_tier
+                list_price = p.base_list_price * lv["list_mult"][t]
+                promo = min(0.6, max(0.0, rng.normal(lv["promo"][t], 0.03)))
+                gross = round(list_price, 2)
+                disc = round(gross * promo, 2)
+                tx.append((f"O{order_seq:07d}", day.date(), st.store_id, p.sku_id, 1,
+                           round(list_price, 2), gross, disc, round(gross - disc, 2),
+                           round(p.unit_cost, 2)))
 
 transactions = pd.DataFrame(tx, columns=[
     "order_id", "order_date", "store_id", "sku_id", "qty", "unit_list_price",
