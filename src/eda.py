@@ -1,11 +1,11 @@
 """
-Run the EDA: build the SQLite DB, pull the views, render charts, and print the
+Run the EDA: build the SQLite DB, render the report charts, and print the
 headline numbers used in the README.
 
     python src/generate_data.py   # once (about 2 min)
     python src/eda.py
 
-"Units" = items sold. One bag is one unit, whatever its size.
+A "unit" is one item sold: one bag counts as one unit, whatever its size.
 """
 from pathlib import Path
 
@@ -21,12 +21,10 @@ ROOT = Path(__file__).resolve().parent.parent
 CHARTS = ROOT / "charts"
 CHARTS.mkdir(exist_ok=True)
 
-# Grey first, one accent (blue) on what each chart is about.
 SURFACE, INK, INK2, GRID = "#fcfcfb", "#0b0b0b", "#52514e", "#e6e5e1"
-ACCENT, GREY, GREY_LT = "#2a78d6", "#8c8a84", "#c9c7c0"
-TIER_LABEL = {"Small": "Small (12 oz)", "Medium": "Medium (2 lb)", "Bulk": "Bulk (5 lb)"}
 ORDER = ["Small", "Medium", "Bulk"]
-TIER_COLOR = {"Small": GREY_LT, "Medium": GREY, "Bulk": ACCENT}
+LABEL = {"Small": "Small (12 oz)", "Medium": "Medium (2 lb)", "Bulk": "Bulk (5 lb)"}
+COLOR = {"Small": "#2a78d6", "Medium": "#008300", "Bulk": "#e34948"}  # blue, green, red
 
 plt.rcParams.update({
     "figure.facecolor": SURFACE, "axes.facecolor": SURFACE, "savefig.facecolor": SURFACE,
@@ -34,35 +32,26 @@ plt.rcParams.update({
     "text.color": INK, "font.size": 10.5, "axes.titlesize": 13, "axes.titleweight": "bold",
     "axes.titlelocation": "left", "axes.spines.top": False, "axes.spines.right": False,
     "axes.grid": True, "axes.grid.axis": "y", "grid.color": GRID, "grid.linewidth": 0.8,
-    "legend.frameon": False, "lines.linewidth": 2,
+    "legend.frameon": False, "lines.linewidth": 2, "text.parse_math": False,
 })
 JAN, DEC, MAR = "2025-01", "2025-12", "2026-03"
 
 
 def shade(ax, xs):
     """Shade the review year (2025) and mark the pricing reset."""
-    lo, hi, reset = xs.index("2025-01"), xs.index("2025-12"), xs.index("2026-01")
-    ax.axvspan(lo - 0.5, hi + 0.5, color="#f1ede4", zorder=0, lw=0)
-    ax.axvline(reset - 0.5, color=INK2, lw=1, ls=(0, (3, 3)), zorder=1)
+    end = max(i for i, k in enumerate(xs) if k < "2026")
+    ax.axvspan(-0.5, end + 0.5, color="#f1ede4", zorder=0, lw=0)
+    ax.axvline(end + 0.5, color=INK2, lw=1, ls=(0, (3, 3)), zorder=1)
     top = ax.get_ylim()[1]
-    ax.text(lo - 0.3, top, "Review period (2025)", va="top", fontsize=9, color=INK2)
-    ax.text(reset - 0.3, top, "Pricing reset", va="top", fontsize=9, color=INK2)
+    ax.text(-0.3, top, "Review period (2025)", va="top", fontsize=9, color=INK2)
+    ax.text(end + 0.7, top, "Pricing reset", va="top", fontsize=9, color=INK2)
 
 
-def fmt_months(ax, xs, offset=0):
-    ax.set_xticks([i + offset for i in range(len(xs))])
-    ax.set_xticklabels([pd.Period(m).strftime("%b\n%y") if i % 3 == 0 else ""
-                        for i, m in enumerate(xs)])
-
-
-def line(ax, xs, values, color, label, lw=2):
-    ax.plot(range(len(xs)), values, color=color, label=label, lw=lw, marker="o", ms=3.5,
-            markeredgecolor=SURFACE, markeredgewidth=1)
-
-
-def callout(ax, xs, mo, v, text, dy=8):
-    ax.annotate(text, (xs.index(mo), v), xytext=(0, dy), textcoords="offset points",
-                ha="center", fontsize=9, color=INK, fontweight="bold")
+def fmt_x(ax, xs, every=3):
+    ax.set_xticks(range(len(xs)))
+    ax.set_xticklabels([pd.Timestamp(k).strftime("%b\n%y") if i % every == 0 else ""
+                        for i, k in enumerate(xs)])
+    ax.tick_params(axis="x", length=0)
 
 
 def save(fig, name):
@@ -71,137 +60,105 @@ def save(fig, name):
     plt.close(fig)
 
 
+def stacked(wide, xs, title, ylabel, fmt, ymax, name, totals=(JAN, DEC)):
+    fig, ax = plt.subplots(figsize=(9, 4.6))
+    bottom = pd.Series(0.0, index=wide.index)
+    for t in ORDER:
+        ax.bar(range(len(xs)), wide[t], bottom=bottom, color=COLOR[t], alpha=0.85, width=0.78,
+               label=LABEL[t], edgecolor=SURFACE, linewidth=2)
+        bottom += wide[t]
+    for k in totals:
+        ax.annotate(fmt(bottom[k]), (xs.index(k), bottom[k]), xytext=(0, 4),
+                    textcoords="offset points", ha="center", fontsize=9, fontweight="bold")
+    ax.yaxis.set_major_formatter(mtick.FuncFormatter(lambda v, _: fmt(v)))
+    ax.set_ylim(0, ymax)
+    ax.set_title(title); ax.set_ylabel(ylabel)
+    fmt_x(ax, xs)
+    ax.legend(loc="upper left", bbox_to_anchor=(0, -0.18), ncol=3)
+    save(fig, name)
+
+
+def lines(wide, xs, title, ylabel, fmt, ymax, name, callouts=(), every=3, markers=True):
+    fig, ax = plt.subplots(figsize=(9, 4.6))
+    for t in ORDER:
+        ax.plot(range(len(xs)), wide[t].values, color=COLOR[t], label=LABEL[t],
+                lw=2.5 if t == "Bulk" else 2, marker="o" if markers else None, ms=3.5,
+                markeredgecolor=SURFACE, markeredgewidth=1)
+    ax.yaxis.set_major_formatter(mtick.FuncFormatter(lambda v, _: fmt(v)))
+    ax.set_ylim(0, ymax)
+    for k, dy in callouts:
+        v = wide.loc[k, "Bulk"]
+        ax.annotate(fmt(v), (xs.index(k), v), xytext=(8 if xs.index(k) < 3 else 0, dy),
+                    textcoords="offset points", ha="center", fontsize=9, fontweight="bold")
+    ax.set_title(title); ax.set_ylabel(ylabel)
+    fmt_x(ax, xs, every); shade(ax, xs)
+    ax.legend(loc="upper left", bbox_to_anchor=(0, -0.18), ncol=3)
+    save(fig, name)
+
+
 def main():
     con = build()
-    m = pd.read_sql("SELECT * FROM v_monthly ORDER BY month", con)
-    mt = pd.read_sql("SELECT * FROM v_monthly_tier ORDER BY month", con)
-    inv = pd.read_sql("SELECT * FROM v_instock ORDER BY month", con)
-    xs = list(m.month)
-    m["gross_profit"] = m.net_sales * m.gross_margin
-    mi = m.set_index("month")
-    tier = lambda t, col: mt[mt.size_tier == t].set_index("month").reindex(xs)[col]
-
     for old in CHARTS.glob("*.png"):
         old.unlink()
 
-    # 1. The paradox: units vs revenue vs gross profit, indexed to Jan 2025 = 100
-    fig, ax = plt.subplots(figsize=(9, 4.6))
-    base = mi.loc[JAN]
-    for col, lab, c, lw in [("units_sold", "Units sold", GREY, 2), ("net_sales", "Net sales", GREY_LT, 2),
-                            ("gross_profit", "Gross profit", ACCENT, 2.5)]:
-        v = m[col] / base[col] * 100
-        line(ax, xs, v, c, lab, lw)
-        callout(ax, xs, DEC, v.iloc[xs.index(DEC)], f"{v.iloc[xs.index(DEC)]:.0f}")
-    ax.axhline(100, color=INK2, lw=0.8)
-    ax.set_ylim(40, 140)
-    ax.set_title("Units climbed, revenue stayed flat, gross profit fell by almost half")
-    ax.set_ylabel("Index (Jan 2025 = 100)")
-    fmt_months(ax, xs); shade(ax, xs)
-    ax.legend(loc="upper left", bbox_to_anchor=(0, -0.18), ncol=3)
-    save(fig, "01_units_revenue_profit.png")
+    t = pd.read_sql("""SELECT substr(order_date,1,7) m, p.size_tier s, SUM(net_sales) ns, SUM(qty) u,
+                       SUM(net_sales)-SUM(cogs) gm, (SUM(net_sales)-SUM(cogs))/SUM(net_sales) gmp,
+                       SUM(discount_amt)/SUM(gross_sales) dr
+                       FROM transactions t JOIN products p USING (sku_id) GROUP BY 1,2""", con)
+    atv = pd.read_sql("""WITH o AS (SELECT order_id, substr(order_date,1,7) m, SUM(net_sales) ns FROM transactions GROUP BY 1,2),
+                         os AS (SELECT DISTINCT t.order_id, p.size_tier s FROM transactions t JOIN products p USING (sku_id))
+                         SELECT m, s, AVG(ns) atv FROM o JOIN os USING (order_id) GROUP BY 1,2""", con)
+    wk = pd.read_sql("""SELECT date(order_date,'weekday 1','-7 days') m, p.size_tier s,
+                        SUM(net_sales)/SUM(qty*size_oz) npo
+                        FROM transactions t JOIN products p USING (sku_id) GROUP BY 1,2""", con)
+    wk = wk[wk.m >= "2025-01-06"]
+    inv = pd.read_sql("""SELECT substr(week_start,1,7) m, size_tier s,
+                         SUM(CASE WHEN on_hand_units>0 THEN 1 ELSE 0 END) k
+                         FROM inventory_snapshots JOIN products USING (sku_id) GROUP BY 1,2""", con)
+    bk = pd.read_sql("""WITH o AS (SELECT order_id, substr(order_date,1,7) m, SUM(qty*size_oz) oz,
+                          MAX(size_tier='Small') Small, MAX(size_tier='Medium') Medium, MAX(size_tier='Bulk') Bulk
+                          FROM transactions JOIN products USING (sku_id) GROUP BY 1,2)
+                        SELECT m, AVG(Small) Small, AVG(Medium) Medium, AVG(Bulk) Bulk FROM o WHERE oz >= 36 GROUP BY 1""",
+                     con).set_index("m")
+    piv = lambda df, col: df.pivot(index="m", columns="s", values=col)[ORDER]
+    xs = sorted(t.m.unique())
+    K = lambda v: f"${v / 1000:.0f}K"
+    pct = lambda v: f"{v:.0%}"
 
-    # 2. Average transaction value
-    fig, ax = plt.subplots(figsize=(9, 4.2))
-    line(ax, xs, m.avg_transaction_value, ACCENT, "Average transaction value", 2.5)
-    for mo in [JAN, DEC, MAR]:
-        callout(ax, xs, mo, mi.loc[mo, "avg_transaction_value"], f"${mi.loc[mo, 'avg_transaction_value']:.0f}")
-    ax.yaxis.set_major_formatter(mtick.StrMethodFormatter("${x:.0f}"))
-    ax.set_ylim(0, 75)
-    ax.set_title("Average transaction value fell from $60 to $38")
-    ax.set_ylabel("Net sales per order")
-    fmt_months(ax, xs); shade(ax, xs)
-    save(fig, "02_avg_transaction_value.png")
+    # Section 1: steady net sales, rising units, eroding ATV
+    stacked(piv(t, "ns"), xs, "Net sales held steady near $370K a month", "Net sales", K, 500_000,
+            "01_net_sales_by_size.png")
+    stacked(piv(t, "u"), xs, "Units sold rose 13%, from 11.3K to 12.8K", "Units sold (1 bag = 1 unit)",
+            lambda v: f"{v / 1000:.1f}K", 16_000, "02_units_by_size.png")
+    lines(piv(atv, "atv"), xs, "ATV on Bulk baskets halved, from $110 to $53",
+          "ATV of orders containing each size", lambda v: f"${v:.0f}", 140, "03_atv_by_size.png",
+          callouts=[(JAN, 8), (DEC, -16)])
+    # Section 2: margin and discounts
+    stacked(piv(t, "gm"), xs, "Gross margin dollars fell 46%, from $232K to $125K", "Gross margin ($)", K,
+            300_000, "04_gross_margin_dollars_by_size.png")
+    lines(piv(t, "gmp"), xs, "Bulk gross margin fell from 58% to 23%", "Gross margin %", pct, 0.8,
+          "05_gross_margin_pct_by_size.png", callouts=[(DEC, -16), (MAR, -16)])
+    lines(piv(t, "dr"), xs, "Discounts on Bulk climbed from 1% to 29%", "Discount %", pct, 0.4,
+          "06_discount_pct_by_size.png", callouts=[(DEC, 8)])
+    # Section 3: net sales per ounce, weekly
+    wxs = sorted(wk.m.unique())
+    lines(piv(wk, "npo"), wxs, "Bulk net sales per ounce fell 46%, from $1.00 to $0.54",
+          "Net sales per ounce", lambda v: f"${v:.2f}", 2.0, "07_net_sales_per_oz_weekly.png",
+          callouts=[("2025-01-13", -16), ("2025-12-15", -16)], every=13, markers=False)
+    # Section 4: assortment and customer behavior
+    stacked(piv(inv, "k"), xs, "In-stock SKU count events fell by half, from 848 to 413",
+            "In-stock SKU count events", lambda v: f"{v:.0f}", 1100, "08_instock_sku_events.png",
+            totals=(JAN, "2025-11"))
+    lines(bk.reindex(xs), xs, "Bulk went from 48% to 89% of big baskets",
+          "Share of 36 oz+ baskets with each size", pct, 1.0, "09_big_basket_mix.png",
+          callouts=[(JAN, -16), (DEC, 8)])
 
-    # 3. SKU availability: in-stock SKUs per store, stacked by size
-    stock = inv.pivot(index="month", columns="size_tier", values="avg_instock_skus").reindex(xs)[ORDER]
-    fig, ax = plt.subplots(figsize=(9, 4.6))
-    bottom = pd.Series(0.0, index=stock.index)
-    sku_color = {"Small": GREY_LT, "Medium": GREY, "Bulk": "#5f5d58"}  # all sizes fell: no accent
-    for t in ORDER:
-        ax.bar(range(len(xs)), stock[t], bottom=bottom, color=sku_color[t], width=0.78,
-               label=TIER_LABEL[t], edgecolor=SURFACE, linewidth=2)
-        bottom += stock[t]
-    for mo in [JAN, DEC, MAR]:
-        callout(ax, xs, mo, bottom[mo], f"{bottom[mo]:.0f}", dy=4)
-    ax.set_ylim(0, 42)
-    ax.set_title("In-stock SKUs per store fell 55% across all sizes")
-    ax.set_ylabel("Avg in-stock SKUs per store (of 36)")
-    fmt_months(ax, xs)
-    ax.legend(loc="upper left", bbox_to_anchor=(0, -0.18), ncol=3)
-    save(fig, "03_sku_availability.png")
-
-    # 4. Cannibalization: share of units sold by size
-    share = mt.pivot(index="month", columns="size_tier", values="units_sold").reindex(xs)[ORDER]
-    share = share.div(share.sum(axis=1), axis=0)
-    fig, ax = plt.subplots(figsize=(9, 4.6))
-    bottom = pd.Series(0.0, index=share.index)
-    for t in ORDER:
-        ax.bar(range(len(xs)), share[t], bottom=bottom, color=TIER_COLOR[t], width=0.78,
-               label=TIER_LABEL[t], edgecolor=SURFACE, linewidth=2)
-        bottom += share[t]
-    for mo in [JAN, DEC, MAR]:
-        i = xs.index(mo); v = share.loc[mo, "Bulk"]
-        ax.text(i, 1 - v / 2, f"{v:.0%}", ha="center", va="center", fontsize=9,
-                color="white", fontweight="bold")
-    ax.yaxis.set_major_formatter(mtick.PercentFormatter(1.0, decimals=0))
-    ax.set_ylim(0, 1.0)
-    ax.set_title("Customers traded down to the cheapest per-oz size: Bulk's unit share nearly tripled")
-    ax.set_ylabel("Share of units sold")
-    fmt_months(ax, xs)
-    ax.legend(loc="upper left", bbox_to_anchor=(0, -0.18), ncol=3)
-    save(fig, "04_unit_mix_by_size.png")
-
-    # 5. Gross margin by size
-    fig, ax = plt.subplots(figsize=(9, 4.6))
-    for t in ORDER:
-        line(ax, xs, tier(t, "gross_margin"), TIER_COLOR[t], TIER_LABEL[t], 2.5 if t == "Bulk" else 2)
-    bm = tier("Bulk", "gross_margin")
-    for mo in [JAN, DEC, MAR]:
-        callout(ax, xs, mo, bm[mo], f"{bm[mo]:.0%}", dy=-16)
-    ax.yaxis.set_major_formatter(mtick.PercentFormatter(1.0, decimals=0))
-    ax.set_ylim(0, 0.8)
-    ax.set_title(f"Bulk gross margin fell from {bm[JAN]:.0%} to {bm[DEC]:.0%}")
-    ax.set_ylabel("Gross margin")
-    fmt_months(ax, xs); shade(ax, xs)
-    ax.legend(loc="upper left", bbox_to_anchor=(0, -0.18), ncol=3)
-    save(fig, "05_gross_margin_by_size.png")
-
-    # 6. Net sales per unit by size
-    fig, ax = plt.subplots(figsize=(9, 4.6))
-    for t in ORDER:
-        line(ax, xs, tier(t, "net_sales_per_unit"), TIER_COLOR[t], TIER_LABEL[t], 2.5 if t == "Bulk" else 2)
-    bu = tier("Bulk", "net_sales_per_unit")
-    for mo in [JAN, DEC]:
-        callout(ax, xs, mo, bu[mo], f"${bu[mo]:.0f}")
-    ax.yaxis.set_major_formatter(mtick.StrMethodFormatter("${x:.0f}"))
-    ax.set_ylim(0, 95)
-    ax.set_title(f"Revenue per Bulk bag fell {bu[DEC] / bu[JAN] - 1:.0%} as list cuts and promos stacked")
-    ax.set_ylabel("Net sales per unit")
-    fmt_months(ax, xs); shade(ax, xs)
-    ax.legend(loc="upper left", bbox_to_anchor=(0, -0.18), ncol=3)
-    save(fig, "06_net_sales_per_unit_by_size.png")
-
-    # Headline numbers for the README
-    pct = lambda a, b: f"{b / a - 1:+.0%}"
-    g = lambda t, mo, col: tier(t, col)[mo]
-    tot = stock.sum(axis=1)
-    out = {
-        "units sold Jan->Dec": pct(mi.loc[JAN, "units_sold"], mi.loc[DEC, "units_sold"]),
-        "net sales Jan->Dec": pct(mi.loc[JAN, "net_sales"], mi.loc[DEC, "net_sales"]),
-        "gross profit Jan->Dec": pct(mi.loc[JAN, "gross_profit"], mi.loc[DEC, "gross_profit"]),
-        "ATV Jan->Dec": f"${mi.loc[JAN, 'avg_transaction_value']:.2f} -> ${mi.loc[DEC, 'avg_transaction_value']:.2f} ({pct(mi.loc[JAN, 'avg_transaction_value'], mi.loc[DEC, 'avg_transaction_value'])})",
-        "Bulk margin Jan->Dec->Mar": f"{g('Bulk', JAN, 'gross_margin'):.1%} -> {g('Bulk', DEC, 'gross_margin'):.1%} -> {g('Bulk', MAR, 'gross_margin'):.1%}",
-        "Bulk discount Jan->Dec": f"{g('Bulk', JAN, 'discount_rate'):.0%} -> {g('Bulk', DEC, 'discount_rate'):.0%}",
-        "Bulk $/unit Jan->Dec": f"${g('Bulk', JAN, 'net_sales_per_unit'):.2f} -> ${g('Bulk', DEC, 'net_sales_per_unit'):.2f} ({pct(g('Bulk', JAN, 'net_sales_per_unit'), g('Bulk', DEC, 'net_sales_per_unit'))})",
-        "Medium $/unit Jan->Dec": f"${g('Medium', JAN, 'net_sales_per_unit'):.2f} -> ${g('Medium', DEC, 'net_sales_per_unit'):.2f} ({pct(g('Medium', JAN, 'net_sales_per_unit'), g('Medium', DEC, 'net_sales_per_unit'))})",
-        "$/oz by size Dec (S/M/B)": " / ".join(f"${g(t, DEC, 'net_sales_per_oz'):.2f}" for t in ORDER),
-        "in-stock SKUs Jan->Dec->Mar": f"{tot[JAN]:.1f} -> {tot[DEC]:.1f} -> {tot[MAR]:.1f} ({pct(tot[JAN], tot[DEC])})",
-        "Bulk unit share Jan->Dec->Mar": f"{share.loc[JAN, 'Bulk']:.0%} -> {share.loc[DEC, 'Bulk']:.0%} -> {share.loc[MAR, 'Bulk']:.0%}",
-        "blended margin Jan / Dec / Mar": f"{mi.loc[JAN, 'gross_margin']:.0%} / {mi.loc[DEC, 'gross_margin']:.0%} / {mi.loc[MAR, 'gross_margin']:.0%}",
-        "ATV Mar 2026": f"${mi.loc[MAR, 'avg_transaction_value']:.2f}",
-    }
-    for k, v in out.items():
-        print(f"{k:34s} {v}")
+    m = pd.read_sql("SELECT * FROM v_monthly", con).set_index("month")
+    m["gp"] = m.net_sales * m.gross_margin
+    print(f"units Jan->Dec      {m.loc[JAN, 'units_sold']:,.0f} -> {m.loc[DEC, 'units_sold']:,.0f}")
+    print(f"net sales Jan->Dec  {K(m.loc[JAN, 'net_sales'])} -> {K(m.loc[DEC, 'net_sales'])}")
+    print(f"ATV Jan->Dec->Mar   ${m.loc[JAN, 'avg_transaction_value']:.2f} -> ${m.loc[DEC, 'avg_transaction_value']:.2f} -> ${m.loc[MAR, 'avg_transaction_value']:.2f}")
+    print(f"gross margin $      {K(m.loc[JAN, 'gp'])} -> {K(m.loc[DEC, 'gp'])} -> {K(m.loc[MAR, 'gp'])}")
 
 
 if __name__ == "__main__":
