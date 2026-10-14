@@ -1,7 +1,7 @@
 # Grounds for Concern
 ### When more units meant less profit: a coffee sizing and pricing EDA
 
-> **Synthetic data.** Ridgeline Roasters is a fictional 6-store specialty coffee retailer. The dataset is generated in this repo, but it's modeled on a real pricing and assortment analysis I led in a regulated retail category, and it reproduces the same pattern. A **unit** is one bag sold, whatever its size: Small (12 oz), Medium (2 lb) or Bulk (5 lb).
+> Ridgeline Roasters is a fictional 6-store specialty coffee retailer. The dataset is generated in this repo, but it's modeled on a real pricing and assortment analysis I led in a regulated retail category, and it reproduces the same pattern. A **unit** is one bag sold, whatever its size: Small (12 oz), Medium (2 lb) or Bulk (5 lb).
 
 📄 Want the long version? **[Read the full report](https://docs.google.com/document/d/1lU5B2a1CKG4U8uVeBsMaXXyvfq0pTHoA6peX7-m9_Yk/edit?usp=sharing)** for every chart, store-level SKU snapshots and the full reasoning.
 
