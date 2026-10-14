@@ -101,25 +101,15 @@ def main():
     for old in CHARTS.glob("*.png"):
         old.unlink()
 
-    t = pd.read_sql("""SELECT substr(order_date,1,7) m, p.size_tier s, SUM(net_sales) ns, SUM(qty) u,
-                       SUM(net_sales)-SUM(cogs) gm, (SUM(net_sales)-SUM(cogs))/SUM(net_sales) gmp,
-                       SUM(discount_amt)/SUM(gross_sales) dr
-                       FROM transactions t JOIN products p USING (sku_id) GROUP BY 1,2""", con)
-    atv = pd.read_sql("""WITH o AS (SELECT order_id, substr(order_date,1,7) m, SUM(net_sales) ns FROM transactions GROUP BY 1,2),
-                         os AS (SELECT DISTINCT t.order_id, p.size_tier s FROM transactions t JOIN products p USING (sku_id))
-                         SELECT m, s, AVG(ns) atv FROM o JOIN os USING (order_id) GROUP BY 1,2""", con)
-    wk = pd.read_sql("""SELECT date(order_date,'weekday 1','-7 days') m, p.size_tier s,
-                        SUM(net_sales)/SUM(qty*size_oz) npo
-                        FROM transactions t JOIN products p USING (sku_id) GROUP BY 1,2""", con)
+    t = pd.read_sql("""SELECT month m, size_tier s, net_sales ns, units_sold u,
+                       net_sales * gross_margin gm, gross_margin gmp, discount_rate dr
+                       FROM v_monthly_tier""", con)
+    atv = pd.read_sql("SELECT month m, size_tier s, atv FROM v_atv_by_size", con)
+    wk = pd.read_sql("SELECT week_start m, size_tier s, net_sales_per_oz npo FROM v_weekly_net_per_oz", con)
     wk = wk[wk.m >= "2025-01-06"]
-    inv = pd.read_sql("""SELECT substr(week_start,1,7) m, size_tier s,
-                         SUM(CASE WHEN on_hand_units>0 THEN 1 ELSE 0 END) k
-                         FROM inventory_snapshots JOIN products USING (sku_id) GROUP BY 1,2""", con)
-    bk = pd.read_sql("""WITH o AS (SELECT order_id, substr(order_date,1,7) m, SUM(qty*size_oz) oz,
-                          MAX(size_tier='Small') Small, MAX(size_tier='Medium') Medium, MAX(size_tier='Bulk') Bulk
-                          FROM transactions JOIN products USING (sku_id) GROUP BY 1,2)
-                        SELECT m, AVG(Small) Small, AVG(Medium) Medium, AVG(Bulk) Bulk FROM o WHERE oz >= 36 GROUP BY 1""",
-                     con).set_index("m")
+    inv = pd.read_sql("SELECT month m, size_tier s, instock_sku_events k FROM v_instock_events", con)
+    bk = pd.read_sql("""SELECT month m, pct_small Small, pct_medium Medium, pct_bulk Bulk
+                        FROM v_big_basket_mix""", con).set_index("m")
     piv = lambda df, col: df.pivot(index="m", columns="s", values=col)[ORDER]
     xs = sorted(t.m.unique())
     K = lambda v: f"${v / 1000:.0f}K"

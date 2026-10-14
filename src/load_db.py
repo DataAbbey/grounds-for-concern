@@ -11,7 +11,7 @@ def build():
     for t in ["stores", "products", "transactions", "inventory_snapshots"]:
         pd.read_csv(ROOT / "data" / f"{t}.csv").to_sql(t, con, if_exists="replace", index=False)
     sql = (ROOT / "sql" / "eda_queries.sql").read_text()
-    views_only = sql.split("-- Q4.")[0]
+    views_only = sql.split("-- Q8.")[0]
     con.executescript(views_only)
     con.commit()
     return con
